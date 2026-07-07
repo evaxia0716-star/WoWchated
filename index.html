@@ -68,11 +68,13 @@ main{max-width:1100px;margin:16px auto 0;padding:0 16px}
 .card:hover{background:var(--card-hover);transform:translateY(-1px);box-shadow:0 3px 10px rgba(120,90,20,.14)}
 .card:active{transform:translateY(0)}
 .card:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
-.card .en{font-family:'JetBrains Mono',monospace;font-size:14.5px;font-weight:600;line-height:1.45;color:var(--text);word-break:break-word;padding-right:8px}
+.card .en{font-family:'JetBrains Mono',monospace;font-size:14.5px;font-weight:600;line-height:1.45;color:var(--text);word-break:break-word;padding-right:26px}
 .card .zh{margin-top:5px;font-size:13px;color:var(--text-dim);line-height:1.55}
 .card .tag{display:block;font-size:10.5px;color:var(--cat-color);opacity:.9;letter-spacing:.04em;margin-bottom:4px}
 .card .del{position:absolute;bottom:8px;right:10px;font-size:12px;color:var(--text-mute);cursor:pointer;padding:2px 6px;border-radius:6px}
 .card .del:hover{color:var(--phoenix);background:#fbe9e5}
+.card .star{position:absolute;top:9px;right:11px;font-size:15px;color:var(--text-mute);cursor:pointer;line-height:1;z-index:2}
+.card .star:hover,.card .star.on{color:var(--gold)}
 .card .btag-mark{color:var(--gold);font-weight:700}
 .card.copied{border-color:var(--gold)}
 .card.copied::after{content:"✓ 已複製";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
@@ -133,7 +135,7 @@ kbd{background:var(--card);border:1px solid var(--line);border-radius:5px;paddin
     </div>
     <div class="tabs" id="tabs"></div>
     <div class="search-row">
-      <input id="search" type="text" placeholder="想說什麼直接打這裡…（中英都可，找不到會自動接 AI 翻譯）" autocomplete="off">
+      <input id="search" type="text" placeholder="搜尋（中英都可，找不到會自動接AI）" autocomplete="off">
       <button id="clearBtn">清除</button>
     </div>
     <div class="chips" id="chips"></div>
@@ -158,13 +160,21 @@ kbd{background:var(--card);border:1px solid var(--line);border-radius:5px;paddin
     <select id="cSub"></select>
     <button id="addPhrase">＋ 新增</button>
   </div>
-  <div class="hint">自訂語句存在這台瀏覽器（localStorage），卡片右下角會有「刪除」。想永久保存就回填進 index.html 的 PHRASES。</div>
+<div class="hint">自訂語句存在這台瀏覽器（localStorage），卡片右下角會有「刪除」。想永久保存就回填進 index.html 的 PHRASES。</div>
+  <hr>
+  <h3>備份與搬家</h3>
+  <div class="row">
+    <button id="expBtn">⬇ 匯出備份 JSON</button>
+    <button id="impBtn">⬆ 匯入 JSON</button>
+    <input type="file" id="impFile" accept=".json,application/json" style="display:none">
+  </div>
+  <div class="hint">把自訂語句、★收藏、常用次數、BattleTag 打包成一個檔。換電腦或換瀏覽器時匯入就能無縫接軌。</div>
 </div>
 
 <main>
   <div id="tipArea"></div>
   <div id="favSection" style="display:none">
-    <div class="section-label" style="color:var(--gold)">⭐ 我的常用（依複製次數自動排序）</div>
+    <div class="section-label" style="color:var(--gold)">⭐ 我的常用（★收藏優先＋複製次數）</div>
     <div class="grid" id="favGrid"></div>
   </div>
   <div id="content"></div>
@@ -192,6 +202,12 @@ kbd{background:var(--card);border:1px solid var(--line);border-radius:5px;paddin
   </details>
   <div style="background:var(--card);border:1px solid var(--gold-bright);border-radius:14px;padding:16px 18px;box-shadow:0 2px 10px rgba(120,90,20,.1)">
     <div class="section-label" style="margin:0 0 8px;color:var(--gold)">🈶 打中文</div>
+    <div id="aiCtx" style="display:flex;gap:6px;margin-bottom:9px;flex-wrap:wrap">
+      <button class="chip" data-ctx="general">一般</button>
+      <button class="chip active" data-ctx="mplus">M+</button>
+      <button class="chip" data-ctx="raid">Raid</button>
+      <button class="chip" data-ctx="pvp">PVP</button>
+    </div>
     <textarea id="aiZh" placeholder="例：法師開英勇 / 這隻血牛先放著 / 等我喝口水" autocomplete="off" style="width:100%;background:#fffdf5;border:1px solid var(--line);border-radius:10px;padding:11px 13px;font-size:15px;color:var(--text);font-family:inherit;outline:none;resize:vertical;min-height:56px;line-height:1.6"></textarea>
     <div style="display:flex;gap:8px;margin-top:11px;align-items:center">
       <button id="aiGo" style="flex:1;background:var(--gold-bright);border:1px solid var(--gold);border-radius:10px;padding:11px;font-size:15px;font-weight:700;color:#3a2b0a;cursor:pointer;font-family:inherit">翻譯並複製（Ctrl+Enter）</button>
@@ -257,8 +273,9 @@ const store={
   get(k,d){try{const v=localStorage.getItem(k);return v===null?d:JSON.parse(v)}catch(e){return d}},
   set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
 };
-const KEY_FAV="wow-fav-counts", KEY_BTAG="wow-btag", KEY_CUSTOM="wow-custom";
+const KEY_FAV="wow-fav-counts", KEY_BTAG="wow-btag", KEY_CUSTOM="wow-custom", KEY_PIN="wow-pins";
 let favCounts=store.get(KEY_FAV,{});
+let pins=store.get(KEY_PIN,{});
 let btag=store.get(KEY_BTAG,"");
 let custom=store.get(KEY_CUSTOM,[]);
 let activeMain="chat", activeSub="all", query="";
@@ -315,13 +332,19 @@ function makeCard(p,idx,isCustom){
   d.className="card"; d.tabIndex=0;
   d.style.setProperty("--cat-color",sub.color||"var(--line)");
   const enShown=fillBtag(p.en);
+  const pkey=p.m+"|"+p.s+"|"+p.en;
   d.innerHTML=
     (p.b?'<span class="tag">'+escapeHTML(sub.name||"")+'｜'+escapeHTML(p.b)+'</span>'
         :'<span class="tag">'+escapeHTML(sub.name||"")+'</span>')+
+    '<span class="star'+(pins[pkey]?" on":"")+'" title="收藏到我的常用">'+(pins[pkey]?"★":"☆")+'</span>'+
     '<div class="en">'+escapeHTML(enShown).replace(/\{btag\}/g,'<span class="btag-mark">{btag}</span>')+'</div>'+
     '<div class="zh">'+escapeHTML(p.zh)+'</div>'+
     (isCustom?'<span class="del">刪除</span>':"");
   d.addEventListener("click",e=>{
+    if(e.target.classList.contains("star")){
+      if(pins[pkey])delete pins[pkey];else pins[pkey]=true;
+      store.set(KEY_PIN,pins);render();return;
+    }
     if(e.target.classList.contains("del")){
       custom.splice(idx,1);store.set(KEY_CUSTOM,custom);render();return;
     }
@@ -358,13 +381,18 @@ function showToast(msg){
 
 /* ── 常用區 ── */
 function renderFavs(){
-  const entries=Object.entries(favCounts).filter(([,n])=>n>=2).sort((a,b)=>b[1]-a[1]).slice(0,8);
-  if(!entries.length){favSection.style.display="none";return}
   const map={};allPhrases().forEach(p=>{map[p.m+"|"+p.s+"|"+p.en]=p});
+  const pinned=Object.keys(pins).filter(k=>pins[k]&&map[k]);
+  const hot=Object.entries(favCounts)
+    .filter(([k,n])=>n>=2&&!pins[k]&&map[k])
+    .sort((a,b)=>b[1]-a[1])
+    .slice(0,Math.max(0,10-pinned.length))
+    .map(([k])=>k);
+  const keys=pinned.concat(hot);
+  if(!keys.length){favSection.style.display="none";return}
   favGrid.innerHTML="";
-  let shown=0;
-  entries.forEach(([key])=>{const p=map[key];if(!p)return;favGrid.appendChild(makeCard(p,-1,false));shown++});
-  favSection.style.display=shown?"":"none";
+  keys.forEach(k=>favGrid.appendChild(makeCard(map[k],-1,false)));
+  favSection.style.display="";
 }
 
 /* ── 主渲染 ── */
@@ -555,6 +583,23 @@ function renderAiRecent(){
   aiRecent.forEach(r=>g.appendChild(aiCard(r.en,r.zh)));
   box.appendChild(g);
 }
+
+/* 情境選擇（預設 M+） */
+let aiCtxVal="mplus";
+document.querySelectorAll("#aiCtx .chip").forEach(b=>b.addEventListener("click",()=>{
+  aiCtxVal=b.dataset.ctx;
+  document.querySelectorAll("#aiCtx .chip").forEach(x=>x.classList.toggle("active",x===b));
+}));
+
+/* 帶版本標籤的翻譯卡片 */
+function aiVariantCard(label,en,zh){
+  const d=aiCard(en,zh);
+  const tag=document.createElement("span");
+  tag.className="tag";tag.style.color="var(--gold)";tag.textContent=label;
+  d.insertBefore(tag,d.firstChild);
+  return d;
+}
+
 async function aiTranslate(){
   if(aiBusy)return;
   const zh=_("aiZh").value.trim();
@@ -564,19 +609,24 @@ async function aiTranslate(){
   const btn=_("aiGo");btn.textContent="翻譯中…";btn.disabled=true;btn.style.opacity=".6";
   try{
     const u=aiUrl+(aiUrl.includes("?")?"&":"?")+"q="+encodeURIComponent(zh)+
+            "&ctx="+encodeURIComponent(aiCtxVal)+
             (aiCode?"&code="+encodeURIComponent(aiCode):"");
     const res=await fetch(u);
     const data=await res.json();
     if(!data.ok)throw new Error(data.error||"未知錯誤");
-    const en=data.en;
+    /* v3 後端回三版本 data.v；接舊後端時退回單一 data.en */
+    const v=data.v||{rec:data.en,short:"",polite:""};
     _("aiResult").style.display="";
-    _("aiResultBody").innerHTML="";
-    const card=aiCard(en,zh);
-    _("aiResultBody").appendChild(card);
-    aiRecent.unshift({en,zh});
+    const body=_("aiResultBody");body.innerHTML="";
+    const g=document.createElement("div");g.className="grid";
+    g.appendChild(aiVariantCard("👍 推薦（已自動複製）",v.rec,zh));
+    if(v.short&&v.short!==v.rec)g.appendChild(aiVariantCard("⚡ 更短",v.short,zh));
+    if(v.polite&&v.polite!==v.rec)g.appendChild(aiVariantCard("🙏 更禮貌",v.polite,zh));
+    body.appendChild(g);
+    aiRecent.unshift({en:v.rec,zh});
     if(aiRecent.length>AI_RECENT_MAX)aiRecent.pop();
     renderAiRecent();
-    if(await copyText(en))showToast("翻好並複製了 ✓");
+    if(await copyText(v.rec))showToast("翻好並複製了「推薦版」✓");
     if(data.cached)_("aiQuota").textContent="⚡ 快取秒回，未扣額度";
     else if(typeof data.left==="number")_("aiQuota").textContent="今日剩 "+data.left+" 次";
   }catch(err){
@@ -585,6 +635,37 @@ async function aiTranslate(){
     aiBusy=false;btn.textContent="翻譯並複製（Ctrl+Enter）";btn.disabled=false;btn.style.opacity="";
   }
 }
+
+/* ── 備份與搬家：匯出／匯入 ── */
+$("#expBtn").addEventListener("click",()=>{
+  const data={ver:2,custom,pins,favCounts,btag};
+  const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(blob);
+  a.download="wow-quickboard-backup.json";
+  a.click();
+  URL.revokeObjectURL(a.href);
+  showToast("已匯出備份檔");
+});
+$("#impBtn").addEventListener("click",()=>$("#impFile").click());
+$("#impFile").addEventListener("change",e=>{
+  const f=e.target.files[0];if(!f)return;
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      const d=JSON.parse(r.result);
+      if(Array.isArray(d.custom))custom=d.custom.filter(x=>x&&x.en);
+      if(d.pins&&typeof d.pins==="object")pins=d.pins;
+      if(d.favCounts&&typeof d.favCounts==="object")favCounts=d.favCounts;
+      if(typeof d.btag==="string"&&d.btag){btag=d.btag;$("#btagInput").value=btag}
+      store.set(KEY_CUSTOM,custom);store.set(KEY_PIN,pins);
+      store.set(KEY_FAV,favCounts);store.set(KEY_BTAG,btag);
+      showToast("匯入完成 ✓");render();
+    }catch(err){showToast("匯入失敗：檔案格式不對")}
+  };
+  r.readAsText(f);
+  e.target.value="";
+});
 _("aiGo").addEventListener("click",aiTranslate);
 _("aiZh").addEventListener("keydown",e=>{
   if((e.ctrlKey||e.metaKey)&&e.key==="Enter"){e.preventDefault();aiTranslate()}
